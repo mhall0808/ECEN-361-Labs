@@ -64,6 +64,8 @@ ISR(TIMER1_COMPA_vect)
 { 
   countdown++;
 
+  // Because I am a simple person, I figure we need nothing more than 2 modulus commands.
+  // each count is .5 seconds, so for 4 that would be 2 seconds.
   if (countdown % 4 == 0)
   digitalWrite(LEDPIN_1, !digitalRead(LEDPIN_1)); 
   if (countdown % 1 == 0)
