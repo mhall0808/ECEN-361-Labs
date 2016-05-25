@@ -1,3 +1,14 @@
+/**
+ * Mark Hall
+ * ECEN 361
+ * Lab 4: A Simple Scheduler
+ * 
+ * This program is designed to teach us how to create a simple scheduler; one that
+ * does not prioritize, nor can it interrupt another task.
+ */
+
+
+
 ///Up to this many tasks can be run, in addition to the idle task
 #define MAXTASKS  8
 uint8_t pulse1_pin = 3;
