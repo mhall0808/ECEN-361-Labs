@@ -73,18 +73,6 @@ void setup() {
     ,  1  // Priority
     ,  NULL );
 
-
-  noInterrupts();           // disable all interrupts
-  TCCR1A = 0;
-  TCCR1B = 0;
-
-  timer1_counter = 1024;   // this seems like about a 1 second wait time.
-  
-  TCNT1 = timer1_counter;   // preload timer
-  TCCR1B |= (1 << CS12);    // 256 prescaler 
-  TIMSK1 |= (1 << TOIE1);   // enable timer overflow interrupt
-  interrupts();             // enable all interrupts
-
   // Now the Task scheduler, which takes over control of scheduling individual Tasks, is automatically started.
 }
 
@@ -108,9 +96,10 @@ void TaskLEDOff( void *pvParameters __attribute__((unused)) )  // This is a Task
   {
     if ( xSemaphoreTake( xSerialSemaphore, portMAX_DELAY ) == pdTRUE)
     {
-      digitalWrite(ledOut, LOW);
-     int ulValueToSend = digitalRead(ledOut);
-      Serial.println("LED OFF Triggered");
+      digitalWrite(ledOut, !digitalRead(ledOut));
+      Serial.println("Task 1 Triggered!");
+      delay(1000);
+      xSemaphoreGive(xSerialSemaphore);
     }
 
     vTaskDelay(1);  // one tick delay (15ms) in between reads for stability
@@ -133,21 +122,11 @@ void TaskLEDOn( void *pvParameters __attribute__((unused)) )  // This is a Task.
   {
     if ( xSemaphoreTake( xSerialSemaphore, portMAX_DELAY ) == pdTRUE)
     {
-      digitalWrite(ledOut, HIGH);
-      Serial.println("LED ON Triggered");
+      digitalWrite(ledOut, !digitalRead(ledOut));
+      Serial.println("Task 2 Triggered!");
+      delay(2000);
+      xSemaphoreGive(xSerialSemaphore);
     }
     vTaskDelay(1);  // one tick delay (15ms) in between reads for stability
   }
 }
-
-/**
- * TIMER INTERRUPT
- *  This will simply free the semaphore, allowing the task manager to open up a new
- *  task.
- */
-ISR(TIMER1_OVF_vect)        // interrupt service routine 
-{
-  TCNT1 = timer1_counter;   // preload timer
-   xSemaphoreGive( xSerialSemaphore ); // Now free or "Give" the Serial Port for others.
-}
-
