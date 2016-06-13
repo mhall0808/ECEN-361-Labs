@@ -1,14 +1,20 @@
 /**
    Mark Hall
    ECEN 361
-   Lab 5: FreeRTOS
+   Lab 7: Semaphores and Queues
+
    Part of the code was copied from the example file located here:
+
     https://www.hackster.io/feilipu/using-freertos-semaphores-in-arduino-ide-b3cd6c
+
    My own comments have been made in order for me to understand each function.
+
    Furthermore, some code was also copied from Brother Grimmett's example file that
    he provided for the class.
+
    This lab has an LED that will toggle on and off.  The time that it will toggle will
-   vary from trigger to trigger.
+   vary by button press.  Furthermore, a value will be passed from one function to the
+   next via queues.
 */
 #include <Arduino_FreeRTOS.h>
 #include <semphr.h>  // add the FreeRTOS functions for Semaphores (or Flags).
@@ -22,12 +28,15 @@ QueueHandle_t xIntegerQueue;
 
 // My wait function is extremely simple; multiply it by a factor of 100 for the 
 // wait time.
-unsigned int toWait = 1;
+volatile unsigned int toWait;
+volatile bool isButton;
+volatile unsigned int waitPeriod = 0;
+volatile unsigned int timer1_counter;
+
 
 /* The service routine for the interrupt. This is the interrupt that the task
 will be synchronized with. */
-static void vExampleInterruptHandler( void );
-
+static void buttonHandle( void );
 void TaskLedOn( void *pvParameters );
 void TaskDisplay( void *pvParameters );
 const uint8_t ledPin = 13;
@@ -45,10 +54,14 @@ void setup() {
 
 // initialize serial communication at 9600 bits per second:
 Serial.begin(9600);
+
 Serial.println("Setup ready");
 vSemaphoreCreateBinary( xTimingSemaphore );
 xIntegerQueue = xQueueCreate( 1, sizeof( unsigned long ) );
 pinMode(ledPin, OUTPUT);
+digitalWrite(ledPin, LOW);
+toWait = 1;
+isButton = false;
 
 // Now set up the Task to handle the analog read.
 
@@ -66,6 +79,25 @@ TaskDisplay
 , NULL
 , 1 // Priority
 , NULL );
+
+pinMode(3, INPUT_PULLUP);
+attachInterrupt(digitalPinToInterrupt(3), buttonHandle, RISING);
+
+
+// initialize timer1 
+  noInterrupts();           // disable all interrupts
+  TCCR1A = 0;
+  TCCR1B = 0;
+
+  // Set timer1_counter to the correct value for our interrupt interval
+  timer1_counter = 59300;   // preload timer 65536-16MHz/256/2Hz
+  
+  TCNT1 = timer1_counter;   // preload timer
+  TCCR1B |= (1 << CS12);    // 256 prescaler 
+  TIMSK1 |= (1 << TOIE1);   // enable timer overflow interrupt
+  interrupts();             // enable all interrupts
+
+
 
 // Now the Task scheduler, which takes over control of scheduling individual Tasks, is automatically started.
 vTaskStartScheduler();
@@ -95,15 +127,16 @@ void loop()
 void TaskLedOn( void *pvParameters __attribute__((unused)) ) // This is a Task.
 {
 Serial.println("Starting analog task");
+xSemaphoreTake( xIntegerQueue,( TickType_t ) 5);
 for (;;)
 {
-  digitalWrite(ledPin, !digitalRead(ledPin));
-  xSemaphoreTake( xTimingSemaphore, portMAX_DELAY );
   unsigned long ulValueToSend = toWait * 100;
-  xQueueSendToBack( xIntegerQueue, &ulValueToSend, 0 );
-  xSemaphoreGive( xTimingSemaphore);
-  delay(toWait * 100);
-  toWait++;
+  if (isButton == true){
+    isButton = false;
+    xQueueSendToBack( xIntegerQueue, &ulValueToSend, 0 );
+    xSemaphoreGive( xIntegerQueue );
+    
+  }
   vTaskDelay(1); // one tick delay (15ms) in between reads for stability
   }
 }
@@ -119,9 +152,29 @@ void TaskDisplay( void *pvParameters __attribute__((unused)) ) // This is a Task
   Serial.println("Starting display task");
   for (;;)
     {
-      xQueueReceive( xIntegerQueue, &value, portMAX_DELAY );
-      Serial.println("Hello World!");
+      if (xQueueReceive( xIntegerQueue, &value,   portMAX_DELAY) == pdTRUE){
       Serial.println(value);
+      }
       vTaskDelay(1); // one tick delay (15ms) in between reads for stability
     }
 }
+
+static void buttonHandle( void )
+{
+  isButton = true;
+  toWait++;
+}
+
+
+ISR(TIMER1_OVF_vect)        // interrupt service routine 
+{
+  TCNT1 = timer1_counter;   // preload timer
+  waitPeriod++;
+  if (waitPeriod >= toWait){
+    digitalWrite(ledPin, !digitalRead(ledPin));
+    waitPeriod = 0;
+  }  
+}
+
+
+
